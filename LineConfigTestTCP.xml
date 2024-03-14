@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LineConfig xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-  <transportMode>COM_PORT</transportMode>
+  <transportMode>TCP_CLIENT</transportMode>
   <LineNumber>1</LineNumber>
-  <COMport>4</COMport>
+  <COMport>0</COMport>
   <Baudrate>38400</Baudrate>
   <ScanIntervalMS>20</ScanIntervalMS>
   <IOMaxErr>5</IOMaxErr>
   <TimeoutErrSec>PT5S</TimeoutErrSec>
-  <IPAddress>192.168.100.200</IPAddress>
-  <IPport>4001</IPport>
+  <IPAddress>127.0.0.1</IPAddress>
+  <IPport>502</IPport>
   <Devices>
     <DeviceConfig>
       <AddressOnLine>1</AddressOnLine>
@@ -24,12 +24,12 @@
     </DeviceConfig>
     <DeviceConfig>
       <AddressOnLine>2</AddressOnLine>
-      <Name>КМШ-Л</Name>
+      <Name>КМШ-З</Name>
       <Type>KMSH-L</Type>
       <redistersReads>
         <RedistersConfig>
           <Start>0</Start>
-          <Count>5</Count>
+          <Count>3</Count>
           <PeriodMS>5000</PeriodMS>
         </RedistersConfig>
       </redistersReads>

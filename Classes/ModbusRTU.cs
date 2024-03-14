@@ -1,5 +1,8 @@
 ﻿using System.ComponentModel;
 using System.IO.Ports;
+using System.Net.Http;
+using System.Net.Sockets;
+using System.Threading;
 
 namespace MdbusNServerMaster.Classes
 {
@@ -51,9 +54,10 @@ namespace MdbusNServerMaster.Classes
         string COMport;                     // Com Port для чтения 
         int COMspeed;                       // Скорость опроса
         SerialPort Port;                    // COM-порт для обмена данными
-        //int TimeOut;                        // Стандартный таймаут между опросами
-        public TransportMode TransportMode;        // Режим протокола пережачи данных
-
+        //int TimeOut;                      // Стандартный таймаут между опросами
+        public TransportMode TransportMode; // Режим протокола пережачи данных
+        public ModbusTCP tcp_client;        // TCP-порт (клиент) для обмена данными
+        public ModbusUDP udp_client;        // UDP-порт для обмена данными
 
         public byte[] Buffer;               // Буфер для передачи сообщений
         public int MessageLength;           // Длина отправляемого сообщения
@@ -414,6 +418,31 @@ namespace MdbusNServerMaster.Classes
             return result;
         }
 
+        public bool ProcessQueryTCP(byte[] Buffer, ref byte[] Answer, int MessageLength, int AnswerLength)
+        {
+
+            // Проверяем подключение линии
+            if (TransportCheck() == false)
+                return false;
+
+            try
+            {
+                // Отправляем запрос по TCP
+                tcp_client.Send(Buffer, MessageLength);
+
+                // Читаем ответ от устройства
+                int bytesRead = tcp_client.Receive(ref Answer, 0, AnswerLength);
+                tcp_client.DiscardInBuffer();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                ErrorString.ErrorString = "Ошибка при отправке запроса/получении ответа: " + ex.Message;
+                return false;
+            }
+        }
+
+
         /// <summary>
         /// Читает версию прошивки устройства.
         /// </summary>
@@ -507,26 +536,35 @@ namespace MdbusNServerMaster.Classes
         /// <param name="Count">Колличество регистров</param>
         /// <param name="Answer">Ответ</param>
         /// <returns></returns>
-        public bool ReadHoldingRegisters(byte DevAddr, ushort StartingAddress, ushort Count, ref byte[] Answer)
+        public byte[] ReadHoldingRegisters(byte DevAddr, ushort StartingAddress, ushort Count)
         {
-            byte[] Buffer = new byte[8];
-            // Проверяем значение Count
-            if (Count < 1 || Count > (ushort)Limits.MAX_READ_REGS)
+            byte[] Answer = new byte[0];
+            int answerLength;
+            switch (TransportMode)
             {
-                ErrorString.ErrorString = "Число регистров должно быть в диапазоне от 1 до 125. Указано: " + Count;
-                ErrorCode = (int)DevErrors.DEVICE_REGCOUNT_ERR;
-                return false;
+                case TransportMode.COM_PORT:
+                    byte[] Buffer = ModbusPackets.PacketReadHoldingRegister(TransportMode, DevAddr, StartingAddress, Count);
+                    answerLength = 5 + Count * 2;
+                    Answer = new byte[answerLength];
+                    if (ProcessQuery(Buffer, ref Answer, 6, answerLength) == true)
+                        return Answer;
+                    else
+                        return new byte[0];
+
+                case TransportMode.UDP:
+                    return Answer;
+                case TransportMode.TCP_CLIENT:
+                    // Создаем буфер для запроса в формате Modbus TCP
+                    byte[] tcpBuffer = ModbusPackets.PacketReadHoldingRegister(TransportMode, DevAddr, StartingAddress, Count); // Длина запроса для функции чтения регистров (регистры адресуются словами, поэтому длина буфера - 12 байт)
+                    answerLength = 9 + Count * 2;
+                    Answer = new byte[answerLength];
+                    if (ProcessQueryTCP(tcpBuffer, ref Answer, 12, answerLength) == true)
+                        return Answer;
+                    else 
+                        return new byte[0];
+                default:
+                    return Answer;
             }
-
-            Buffer[0] = DevAddr;                                    // Аддрес устройства
-            Buffer[1] = (byte)ModbusCode.ReadHoldingRegisters;      // Код функции чтения регистра
-            Buffer[2] = (byte)(StartingAddress >> 8);               // Старший байт начального адреса регистра
-            Buffer[3] = (byte)(StartingAddress & 0xFF);             // Младший байт начального адреса регистра
-            Buffer[4] = (byte)(Count >> 8);                         // Старщий байт колличества регистров
-            Buffer[5] = (byte)(Count & 0xFF);                       // Младший байт колличества регистров
-            int answerlenght = 5 + Count * 2;
-
-            return ProcessQuery(Buffer, ref Answer, 6, answerlenght);
         }
 
         /// <summary>
@@ -540,10 +578,10 @@ namespace MdbusNServerMaster.Classes
         /// <returns>Возвращает полученый массив данных</returns>
         public int[] ReadHoldingRegistersEx(byte DevAddr, ushort StartingAddress, ushort Count)
         {
-            ushort cnt = 0;
+            ushort cnt;
             ushort Address = StartingAddress;
             int[] FinalAnswer = new int[Count];
-
+            int Shift;
             // Проверяем, не превышает ли количество запрашиваемых регистров максимально допустимое значение
             if (Count > (ushort)Limits.MAX_READ_REGS)
             {
@@ -562,13 +600,17 @@ namespace MdbusNServerMaster.Classes
                         Count = 0;
                     }
 
-                    byte[] Answer = new byte[(cnt * 2)+5]; // Предполагаем, что каждый регистр имеет размер 2 байта
-                    if (!ReadHoldingRegisters(DevAddr, Address, cnt, ref Answer)) return new int[0];
-
+                    byte[] Answer = ReadHoldingRegisters(DevAddr, Address, cnt); // Предполагаем, что каждый регистр имеет размер 2 байта
+                    if (Answer.Length == 0)
+                        return new int[0];
+                    if (TransportMode == TransportMode.COM_PORT)
+                        Shift = 3;
+                    else
+                        Shift = 9;
                     // Преобразуем байты в int и сохраняем их в массиве FinalAnswer
                     for (int i = 0; i < cnt * 2; i += 2)
                     {
-                        int valueIndex = i + 3; // Начинаем считывание значений с 6-го байта массива Answer
+                        int valueIndex = i + Shift; // Начинаем считывание значений с 6-го байта массива Answer
                         if (valueIndex + 1 < Answer.Length) // Проверяем, чтобы не выйти за границы массива Answer
                         {
                             int value = (Answer[valueIndex] << 8) | Answer[valueIndex + 1]; // Объединяем старший и младший байты
@@ -583,17 +625,17 @@ namespace MdbusNServerMaster.Classes
             {
                 int index = 0;
                 // Читаем регистры и сохраняем полученные данные в массив FinalAnswer
-                byte[] Answer = new byte[(Count * 2)+5]; // Предполагаем, что каждый регистр имеет размер 2 байта
-                if (!ReadHoldingRegisters(DevAddr, StartingAddress, Count, ref Answer)) return new int[0];
-                //for(int i = 0; i < Answer.Length;i++)
-                //{
-                //    FinalAnswer[i] = Answer[i];
-                //}
-                //return FinalAnswer;
+                byte[] Answer = ReadHoldingRegisters(DevAddr, StartingAddress, Count); // Предполагаем, что каждый регистр имеет размер 2 байта
+                if (Answer.Length == 0)
+                    return new int[0];
                 // Преобразуем байты в int и сохраняем их в массиве FinalAnswer
+                if (TransportMode == TransportMode.COM_PORT)
+                    Shift = 3;
+                else
+                    Shift = 9;
                 for (int i = 0; i < Count * 2; i += 2)
                 {
-                    int valueIndex = i + 3; // Начинаем считывание значений с 6-го байта массива Answer
+                    int valueIndex = i + Shift; // Начинаем считывание значений с 6-го байта массива Answer
                     if (valueIndex + 1 < Answer.Length) // Проверяем, чтобы не выйти за границы массива Answer
                     {
                         int value = (Answer[valueIndex] << 8) | Answer[valueIndex + 1]; // Объединяем старший и младший байты
@@ -739,6 +781,52 @@ namespace MdbusNServerMaster.Classes
                 // Записываем все регистры в одном пакете
                 if (!WriteMultipleRegisters(DevAddr, StartingAddress, Count, Data, start_index)) return false;
             }
+            return true;
+        }
+
+        /// <summary>
+        /// Открыть TCP-порт 
+        /// </summary>
+        public bool TcpPortOpen(string ip_address, int port, int packetInterval)
+        {
+            int result;
+
+            if (tcp_client != null)
+                tcp_client.Close();
+            tcp_client = new ModbusTCP();
+            tcp_client.SetRemouteAddress(ip_address, port);
+            result = tcp_client.Open();
+            if (result >= 0)
+            {
+                //TimeOut = DEFAULT_TIMEOUT;
+                PacketInterval = packetInterval;
+                //tcp_client.SetReceiveTimeout(TimeOut);
+            }
+            else
+                return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Открыть UDP-порт 
+        /// </summary>
+        public bool UdpPortOpen(string ip_address, ushort remote_port, ushort local_port, int packetInterval)
+        {
+            int result;
+
+            if (udp_client != null)
+                udp_client.Close();
+            udp_client = new ModbusUDP();
+            udp_client.SetRemouteAddress(ip_address, remote_port, local_port);
+            result = udp_client.Open();
+            if (result >= 0)
+            {
+                //TimeOut = DEFAULT_TIMEOUT;
+                PacketInterval = packetInterval;
+                //udp_client.SetReceiveTimeout(TimeOut);
+            }
+            else
+                return false;
             return true;
         }
     }

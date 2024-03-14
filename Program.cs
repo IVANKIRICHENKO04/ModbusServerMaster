@@ -9,7 +9,7 @@ namespace ModbusRTUMaster
         static void Main(string[] args)
         {
 
-            string path = "D:\\Avalonia\\HelpingPrograms\\MdbusNServerMaster\\LineConfigTest.xml";
+            string path = "D:\\Avalonia\\HelpingPrograms\\ModbusServerMaster\\LineConfigTestTCP.xml";
             ModbusMain.Start(path);
         }
     }

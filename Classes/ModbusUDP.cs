@@ -1,0 +1,220 @@
+﻿using System.Net;
+using System.Net.Sockets;
+
+namespace MdbusNServerMaster.Classes
+{
+    public class ModbusUDP
+    {
+        string RemoteIpAddress;     // адрес для передачи запроса
+        int RemotePort;             // порт для передачи запроса 
+        int LocalPort;
+        public UdpClient udp_client;
+        IPEndPoint ReceiveIpEndPoint;
+        IPEndPoint SendIpEndPoint;
+
+        public string ErrorString;
+        public int ErrorCode;
+
+        /// <summary>
+        /// Базовый конструктор
+        /// </summary>
+        public ModbusUDP() { }
+
+        /// <summary>
+        /// Конструктор с адресом
+        /// </summary>
+        public ModbusUDP(string remoteIPaddress, ushort remote_port, ushort local_port)
+        {
+            RemoteIpAddress = remoteIPaddress;
+            RemotePort = remote_port;
+            LocalPort = local_port;
+        }
+
+        /// <summary>
+        /// Установление адреса
+        /// </summary>
+        public void SetRemouteAddress(string remoteIPaddress, ushort remote_port, ushort local_port)
+        {
+            RemoteIpAddress = remoteIPaddress;
+            RemotePort = remote_port;
+            LocalPort = local_port;
+        }
+
+        /// <summary>
+        /// Установление задержки
+        /// </summary>
+        public void SetReceiveTimeout(int timeout)
+        {
+            if (udp_client != null && udp_client.Client != null)
+                udp_client.Client.ReceiveTimeout = timeout;
+        }
+
+        /// <summary>
+        /// Открытие клиента
+        /// </summary>
+        public int Open()
+        {
+            try
+            {
+                if (udp_client != null)
+                {
+                    udp_client.Close();
+                    udp_client = null;
+                }
+
+                udp_client = new UdpClient(LocalPort);
+
+                // Создание объекта для хранения IP-адреса удаленного хоста
+                IPAddress remoteIPAddress;
+                if (!IPAddress.TryParse(RemoteIpAddress, out remoteIPAddress))
+                {
+                    ErrorString = String.Format("Недопустимый IP-адрес: {0}", RemoteIpAddress);
+                    ErrorCode = (int)DevErrors.IP_FORMAT_ERROR;
+                    return -1;
+                }
+
+                // Создание точек конечных для отправки и приема данных
+                ReceiveIpEndPoint = new IPEndPoint(IPAddress.Any, LocalPort);
+                SendIpEndPoint = new IPEndPoint(remoteIPAddress, RemotePort);
+
+                // Подключение к удаленному хосту
+                udp_client.Connect(SendIpEndPoint);
+            }
+            catch (Exception e)
+            {
+                ErrorString = String.Format("Ошибка при открытии клиента: {0}", e.Message);
+                ErrorCode = (int)DevErrors.UDP_CREATE_ERROR;
+                return -1;
+            }
+
+            return 0;
+        }
+
+
+        /// <summary>
+        /// Закрытие клиента
+        /// </summary>
+        public void Close()
+        {
+            if (udp_client != null && udp_client.Client != null)
+            {
+                udp_client.Close();
+                udp_client = null;
+            }
+        }
+
+        /// <summary>
+        /// Чтение байтов
+        /// </summary>
+        /// <param name="buf">Буфер для сохранения прочитанных знаечний</param>
+        /// <param name="offset">Сдвиг записи значений в буфере</param>
+        /// <param name="read_size">Колличсетво байтов для чтения</param>
+        /// <returns>Вохвращает прочитанное колличсество байтов</returns>
+        public int ReadByte(ref byte[] buf, int offset, int read_size)
+        {
+            int rsize = 0;           // Общее количество прочитанных байтов
+            int rcount = 0;          // Количество оставшихся для чтения байтов в текущем буфере
+            byte[] rbuf = null;      // Буфер для принятых данных
+            int rindex = 0;
+
+            // Проверка на null для buf
+            if (buf == null)
+            {
+                throw new ArgumentNullException("buf", "Буфер не может быть null.");
+            }
+
+            try
+            {
+                while (rsize < read_size)
+                {
+                    if (rcount == 0)  // Если в текущем буфере нет данных для чтения
+                    {
+                        rbuf = udp_client.Receive(ref ReceiveIpEndPoint); // Получение нового буфера данных
+                        if (rbuf == null || rbuf.Length == 0)
+                        {
+                            // В случае пустого буфера пропускаем итерацию
+                            continue;
+                        }
+                        rcount = rbuf.Length;  // Обновление количества байтов в буфере
+                        rindex = 0;            // Сброс индекса для чтения из нового буфера
+                    }
+                    buf[rsize + offset] = rbuf[rindex]; // Запись байта из буфера rbuf в целевой буфер buf
+                    rsize++; rindex++; rcount--;       // Увеличение счетчика прочитанных байтов и смещения в буфере
+                }
+                return rsize; // Возвращаем общее количество прочитанных байтов
+            }
+            catch (SocketException e)
+            {
+                if (e.SocketErrorCode == SocketError.TimedOut)
+                {
+                    ErrorString = "устройство не отвечает";
+                    ErrorCode = (int)DevErrors.UDP_RECEIVE_ERROR;
+                    throw new TimeoutException(ErrorString);
+                }
+                else
+                {
+                    ErrorString = String.Format("ошибка приема {0}/{1}: {2}", RemoteIpAddress, RemotePort, e.Message);
+                    ErrorCode = (int)DevErrors.UDP_RECEIVE_ERROR;
+                    throw new Exception(ErrorString);
+                }
+            }
+            catch (Exception e)
+            {
+                ErrorString = "ошибка приема: " + e.Message;
+                ErrorCode = (int)DevErrors.UDP_RECEIVE_ERROR;
+                throw new Exception(ErrorString);
+            }
+        }
+
+        /// <summary>
+        /// Отправка пакета по UDP
+        /// </summary>
+        /// <param name="buf">Пакет для отправки</param>
+        /// <param name="size">Размер данных на отправку из пакета</param>
+        /// <returns>0 если отправка прошла успешно, -1 если возникли ошибки</returns>
+        public int Send(byte[] buf, int size)
+        {
+            try
+            {
+                if (buf == null || size <= 0 || size > buf.Length)
+                {
+                    throw new ArgumentException("Некорректные параметры buf или size");
+                }
+
+                int bytesSent = udp_client.Send(buf, size, SendIpEndPoint);
+
+                if (bytesSent != size)
+                {
+                    throw new Exception("Не все данные были успешно отправлены");
+                }
+            }
+            catch (Exception e)
+            {
+                ErrorString = String.Format("Ошибка передачи: {0}", e.Message);
+                ErrorCode = (int)DevErrors.UDP_SEND_ERROR;
+                return -1;
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// Сброс приемного буфера UDP-соединения
+        /// </summary>
+        public void DiscardInBuffer()
+        {
+            try
+            {
+                // Проверяем, есть ли данные в приемном буфере
+                while (udp_client.Available > 0)
+                {
+                    // Читаем данные из приемного буфера без обработки
+                    byte[] discardedData = udp_client.Receive(ref ReceiveIpEndPoint);
+                }
+            }
+            catch (Exception e)
+            {
+                // Обработка исключения, если необходимо
+            }
+        }
+    }
+}

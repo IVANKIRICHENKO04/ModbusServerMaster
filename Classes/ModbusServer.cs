@@ -25,8 +25,7 @@ namespace MdbusNServerMaster.Classes
         {
             modbus = new ModbusRTU();
             this.lineConfig = lineConfig;
-            modbus.TransportMode = TransportMode.COM_PORT;
-            modbus.PortOpen((byte)lineConfig.COMport, lineConfig.Baudrate);
+            modbus.TransportMode = this.lineConfig.transportMode;
             foreach (var dev in lineConfig.Devices)
             {
                 var bufdev = new SerialDevice(dev, this);
@@ -39,9 +38,12 @@ namespace MdbusNServerMaster.Classes
         /// </summary>
         public void Run()
         {
-            Console.WriteLine("Server starting...");
-            ServerThread = new Thread(() => { StartingSurvey(); });
-            ServerThread.Start();
+            if (TransportOpen())
+            {
+                ServerThread = new Thread(() => { StartingSurvey(); });
+                ServerThread.Start();
+            }
+            
         }
 
         public void StartingSurvey()
@@ -165,38 +167,38 @@ namespace MdbusNServerMaster.Classes
                     return false;
                 }
             }
-            //else
-            //if (lineConfig.transportMode == TransportMode.UDP)
-            //{
-            //    if (modbus.UdpPortOpen(lineConfig.IPAddress, lineConfig.IPport, lineConfig.IPport, modbus.GetPacketInterval(lineConfig.Baudrate)) == true)
-            //    {
-            //        Console.Write($"Modbus-сервер -- {lineConfig.transportMode} порт открыт");
-            //        LineError = 0;
-            //    }
-            //    else
-            //    {
-            //        LineError = modbus.udp_client.ErrorCode;
-            //        Console.Write($"** Modbus-сервер: {lineConfig.transportMode} -- " + modbus.udp_client.ErrorString);
-            //        LastLineErrorTime = DateTime.Now;
-            //        return false;
-            //    }
-            //}
-            //else
-            //if (lineConfig.transportMode == TransportMode.TCP_CLIENT)
-            //{
-            //    if (modbus.TcpPortOpen(lineConfig.IPAddress, lineConfig.IPport, modbus.GetPacketInterval(lineConfig.Baudrate)) == true)
-            //    {
-            //        Console.Write($"Modbus-сервер -- {lineConfig.transportMode}, TCP-клиент - соединение установлено");
-            //        LineError = 0;
-            //    }
-            //    else
-            //    {
-            //        LineError = modbus.tcp_client.ErrorCode;
-            //        Console.Write($"** Modbus-сервер: {lineConfig.transportMode} -- " + modbus.tcp_client.ErrorString);
-            //        LastLineErrorTime = DateTime.Now;
-            //        return false;
-            //    }
-            //}
+            else
+            if (lineConfig.transportMode == TransportMode.UDP)
+            {
+                if (modbus.UdpPortOpen(lineConfig.IPAddress, lineConfig.IPport, lineConfig.IPport, modbus.GetPacketInterval(lineConfig.Baudrate)) == true)
+                {
+                    Console.Write($"Modbus-сервер -- {lineConfig.transportMode} порт открыт");
+                    LineError = 0;
+                }
+                else
+                {
+                    LineError = modbus.udp_client.ErrorCode;
+                    Console.Write($"** Modbus-сервер: {lineConfig.transportMode} -- " + modbus.udp_client.ErrorString);
+                    LastLineErrorTime = DateTime.Now;
+                    return false;
+                }
+            }
+            else
+            if (lineConfig.transportMode == TransportMode.TCP_CLIENT)
+            {
+                if (modbus.TcpPortOpen(lineConfig.IPAddress, lineConfig.IPport, modbus.GetPacketInterval(lineConfig.Baudrate)) == true)
+                {
+                    Console.WriteLine($"Modbus-сервер -- {lineConfig.transportMode}, TCP-клиент - соединение установлено");
+                    LineError = 0;
+                }
+                else
+                {
+                    LineError = modbus.tcp_client.ErrorCode;
+                    Console.Write($"** Modbus-сервер: {lineConfig.transportMode} -- " + modbus.tcp_client.ErrorString);
+                    LastLineErrorTime = DateTime.Now;
+                    return false;
+                }
+            }
             return true;
         }
 
