@@ -154,7 +154,7 @@ namespace MdbusNServerMaster.Classes
         {
             if (lineConfig.transportMode == TransportMode.COM_PORT)
             {
-                if (modbus.PortOpen((byte)lineConfig.COMport, lineConfig.Baudrate) == true)
+                if (modbus.SerialPortOpen((byte)lineConfig.COMport, lineConfig.Baudrate) == true)
                 {
                     Console.Write($"Modbus-сервер -- {lineConfig.COMport} COM порт открыт");
                     LineError = 0;

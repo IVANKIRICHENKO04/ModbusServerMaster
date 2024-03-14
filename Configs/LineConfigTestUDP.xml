@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ArrayOfLineConfig xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <LineConfig>
+    <transportMode>UDP</transportMode>
+    <LineNumber>3</LineNumber>
+    <COMport>0</COMport>
+    <Baudrate>38400</Baudrate>
+    <ScanIntervalMS>20</ScanIntervalMS>
+    <IOMaxErr>5</IOMaxErr>
+    <TimeoutErrSec>PT5S</TimeoutErrSec>
+    <IPAddress>127.0.0.1</IPAddress>
+    <IPport>504</IPport>
+    <Devices>
+      <DeviceConfig>
+        <AddressOnLine>0</AddressOnLine>
+        <Name>KMSH</Name>
+        <Type>KMSH</Type>
+        <redistersReads>
+          <RedistersConfig>
+            <Start>0</Start>
+            <Count>5</Count>
+            <PeriodMS>5000</PeriodMS>
+          </RedistersConfig>
+        </redistersReads>
+      </DeviceConfig>
+    </Devices>
+  </LineConfig>
+</ArrayOfLineConfig>

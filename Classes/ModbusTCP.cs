@@ -42,6 +42,18 @@ namespace MdbusNServerMaster.Classes
         }
 
         /// <summary>
+        /// Установление задержки
+        /// </summary> 
+        public void SetReceiveTimeout(int timeout)
+        {
+            if (tcp_client != null && tcp_client.Client != null)
+            {
+                tcp_client.Client.ReceiveTimeout = timeout;
+                tcp_client.Client.SendTimeout = 5000;
+            }
+        }
+
+        /// <summary>
         /// Открытие порта
         /// </summary>
         /// <returns>0 если открытие порта прошло успешно, -1 если возникли ошибки</returns>
@@ -134,7 +146,7 @@ namespace MdbusNServerMaster.Classes
         }
 
         /// <summary>
-        /// Метод читающий порт
+        /// Метод получения данных
         /// </summary>
         /// <param name="buf">Буфер для приема данных</param>
         /// <param name="offset">Смещение записи в массиве</param>
@@ -172,11 +184,11 @@ namespace MdbusNServerMaster.Classes
         /// <param name="buf">Данные для отправки</param>
         /// <param name="size">Размер данных из массива для отправки</param>
         /// <returns>0 если отправка прошла успешно, -1 если возникли ошибки</returns>
-        public int Send(byte[] buf, int size)
+        public int Send(byte[] buf)
         {
             try
             {
-                tcp_client.Client.Send(buf, size, SocketFlags.None);
+                tcp_client.Client.Send(buf, buf.Length, SocketFlags.None);
             }
             catch (IOException e)
             {   // таймаут передачи

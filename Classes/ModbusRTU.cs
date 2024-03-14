@@ -58,6 +58,7 @@ namespace MdbusNServerMaster.Classes
         public TransportMode TransportMode; // Режим протокола пережачи данных
         public ModbusTCP tcp_client;        // TCP-порт (клиент) для обмена данными
         public ModbusUDP udp_client;        // UDP-порт для обмена данными
+        int TimeOut;
 
         public byte[] Buffer;               // Буфер для передачи сообщений
         public int MessageLength;           // Длина отправляемого сообщения
@@ -137,10 +138,10 @@ namespace MdbusNServerMaster.Classes
         /// <param name="com_port_number">Номер COM-порта.</param>
         /// <param name="ComSpeed">Скорость передачи данных.</param>
         /// <returns>True, если порт успешно открыт, иначе False.</returns>
-        public bool PortOpen(byte com_port_number, int ComSpeed)
+        public bool SerialPortOpen(byte com_port_number, int ComSpeed)
         {
             string comport = "COM" + Convert.ToString(com_port_number); // Формируем имя COM-порта
-            return NewPortOpen(comport, ComSpeed); // Вызываем метод открытия порта по имени
+            return NewSerialPortOpen(comport, ComSpeed); // Вызываем метод открытия порта по имени
         }
 
         /// <summary>
@@ -149,18 +150,18 @@ namespace MdbusNServerMaster.Classes
         /// <param name="ComPort">Имя COM-порта.</param>
         /// <param name="ComSpeed">Скорость передачи данных.</param>
         /// <returns>True, если порт успешно открыт, иначе False.</returns>
-        public bool NewPortOpen(string ComPort, int ComSpeed)
+        public bool NewSerialPortOpen(string ComPort, int ComSpeed)
         {
             COMspeed = ComSpeed; // Устанавливаем скорость передачи данных
             COMport = ComPort; // Устанавливаем имя COM-порта
-            return CreaetNewPort(); // Вызываем метод открытия порта
+            return CreaetNewSerialPort(); // Вызываем метод открытия порта
         }
 
         /// <summary>
         /// Создает новый порт
         /// </summary>
         /// <returns>True, если порт успешно открыт, иначе False.</returns>
-        public bool CreaetNewPort()
+        public bool CreaetNewSerialPort()
         {
             bool result = true; // Переменная для хранения результата открытия порта
 
@@ -193,14 +194,26 @@ namespace MdbusNServerMaster.Classes
         /// Устанавливает таймаут для приема данных.
         /// </summary>
         /// <param name="timeout">Таймаут в миллисекундах.</param>
-        //public void SetTimeout(int timeout)
-        //{
-        //    if (TransportMode == (ushort)TransportMode.COM_PORT)
-        //    {
-        //        if (Port != null)
-        //            Port.ReadTimeout = timeout; // Устанавливаем таймаут для COM-порта
-        //    }
-        //}
+        public void SetTimeout(int timeout)
+        {
+            if (TransportMode == (ushort)TransportMode.COM_PORT)
+            {
+                if (Port != null)
+                    Port.ReadTimeout = timeout;
+            }
+            else
+            if (TransportMode == TransportMode.UDP)
+            {
+                if (udp_client != null)
+                    udp_client.SetReceiveTimeout(timeout);
+            }
+            else
+            if (TransportMode == TransportMode.TCP_CLIENT)
+            {
+                if (tcp_client != null)
+                    tcp_client.SetReceiveTimeout(timeout);
+            }
+        }
 
         /// <summary>
         /// Закрывает соединение линии.
@@ -252,10 +265,8 @@ namespace MdbusNServerMaster.Classes
         /// <returns>Возвращает true, если линия связи доступна, в противном случае - false.</returns>
         bool TransportCheck()
         {
-            // Проверка для COM-порта
             if (TransportMode == (ushort)TransportMode.COM_PORT)
             {
-                // Проверяем, что порт был создан
                 if (Port == null)
                 {
                     ErrorString.ErrorString = "Порт не открыт";
@@ -263,7 +274,7 @@ namespace MdbusNServerMaster.Classes
                     return false;
                 }
 
-                // Проверяем, что порт открыт
+                // Порт закрыт 
                 if (!Port.IsOpen)
                 {
                     ErrorString.ErrorString = "Порт неожиданно закрыт";
@@ -271,7 +282,38 @@ namespace MdbusNServerMaster.Classes
                     return false;
                 }
             }
-
+            else
+            if (TransportMode == TransportMode.UDP)
+            {
+                if (udp_client == null)
+                {
+                    ErrorString.ErrorString = "UDP-клиент не создан";
+                    ErrorCode = (int)DevErrors.UDP_CLIENT_NOT_OPEN;
+                    return false;
+                }
+                if (udp_client.udp_client == null || udp_client.udp_client.Client == null)
+                {
+                    ErrorString.ErrorString = "UDP-клиент неожиданно закрыт";
+                    ErrorCode = (int)DevErrors.UDP_CLIENT_CLOSED;
+                    return false;
+                }
+            }
+            else
+            if (TransportMode == TransportMode.TCP_CLIENT)
+            {
+                if (tcp_client == null)
+                {
+                    ErrorString.ErrorString = "TCP-клиент не создан";
+                    ErrorCode = (int)DevErrors.TCP_CLIENT_NOT_OPEN;
+                    return false;
+                }
+                if (tcp_client.tcp_client == null || tcp_client.tcp_client.Client == null)
+                {
+                    ErrorString.ErrorString = "TCP-клиент - соединение закрыто";
+                    ErrorCode = (int)DevErrors.TCP_CONNECTION_CLOSED;
+                    return false;
+                }
+            }
             return true;
         }
 
@@ -353,10 +395,9 @@ namespace MdbusNServerMaster.Classes
         /// </summary>
         /// <param name="Buffer">Пакет запроса без контрольной суммы</param>
         /// <param name="Answer">Массив байтов ответа</param>
-        /// <param name="MessageLength">Длинна отправленного пакета</param>
         /// <param name="AnswerLenght">Длина ожидаемого ответа</param>
-        /// <returns></returns>
-        public bool ProcessQuery(byte[] Buffer, ref byte[] Answer, int MessageLength, int AnswerLenght)
+        /// <returns>True если отправка и принятие пакета прошли успешно, False если воникли проблемы</returns>
+        public bool ProcessQuery(byte[] Buffer, ref byte[] Answer, int AnswerLenght)
         {
             bool result = true; // Результат выполнения операции
 
@@ -364,10 +405,7 @@ namespace MdbusNServerMaster.Classes
             if (TransportCheck() == false)
                 return false;
 
-            // Добавляем контрольную сумму к сообщению
-            ushort CRC = CalculateCRC(Buffer, MessageLength);
-            Buffer[MessageLength++] = (byte)(CRC & 0xFF);
-            Buffer[MessageLength++] = (byte)((CRC >> 8) & 0xFF);
+
             for (int i = 0; i < RepeatNumber; i++)
             {
                 // Проверяем подключение линии
@@ -418,7 +456,14 @@ namespace MdbusNServerMaster.Classes
             return result;
         }
 
-        public bool ProcessQueryTCP(byte[] Buffer, ref byte[] Answer, int MessageLength, int AnswerLength)
+        /// <summary>
+        /// Отправляет пакет устройству по линии TCP/IP
+        /// </summary>
+        /// <param name="Buffer">Пакет запроса</param>
+        /// <param name="Answer">Массив байтов ответа<</param>
+        /// <param name="AnswerLength">Длина ожидаемого ответа</param>
+        /// <returns>True если отправка и принятие пакета прошли успешно, False если воникли проблемы</returns>
+        public bool ProcessQueryTCP(byte[] Buffer, ref byte[] Answer, int AnswerLength)
         {
 
             // Проверяем подключение линии
@@ -428,12 +473,49 @@ namespace MdbusNServerMaster.Classes
             try
             {
                 // Отправляем запрос по TCP
-                tcp_client.Send(Buffer, MessageLength);
+                tcp_client.Send(Buffer);
 
                 // Читаем ответ от устройства
                 int bytesRead = tcp_client.Receive(ref Answer, 0, AnswerLength);
                 tcp_client.DiscardInBuffer();
                 return true;
+            }
+            catch (Exception ex)
+            {
+                ErrorString.ErrorString = "Ошибка при отправке запроса/получении ответа: " + ex.Message;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Отправляет пакет устройству по линии UDP/IP
+        /// </summary>
+        /// <param name="Buffer">Пакет запроса</param>
+        /// <param name="Answer">Массив байтов ответа<</param>
+        /// <param name="AnswerLength">Длина ожидаемого ответа</param>
+        /// <returns>True если отправка и принятие пакета прошли успешно, False если воникли проблемы</returns>
+        public bool ProcessQueryUDP(byte[] Buffer, ref byte[] Answer, int AnswerLength)
+        {
+
+            // Проверяем подключение линии
+            if (TransportCheck() == false)
+                return false;
+
+            try
+            {
+                // Отправляем запрос по TCP
+                if (udp_client.Send(Buffer) != -1)
+                {
+                    // Читаем ответ от устройства
+                    int bytesRead = udp_client.ReadByte(ref Answer, 0, AnswerLength);
+                    udp_client.DiscardInBuffer();
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+
             }
             catch (Exception ex)
             {
@@ -460,7 +542,7 @@ namespace MdbusNServerMaster.Classes
 
             byte[] Answer = new byte[AnswerLenght];
             // Выполняем запрос и обрабатываем его результат
-            if (!ProcessQuery(bytes, ref Answer, 2, AnswerLenght)) // Если запрос не удался
+            if (!ProcessQuery(bytes, ref Answer, AnswerLenght)) // Если запрос не удался
                 return null; // Возвращаем null
 
             // Преобразуем полученные байты в строку, используя кодировку 1251 (Windows-1251)
@@ -525,7 +607,7 @@ namespace MdbusNServerMaster.Classes
 
             data[5] = 0; // Зарезервированный байт
 
-            return ProcessQuery(data, ref Answer, 6, WaitDataBytes); // Возвращаем true, если операция установки катушки выполнена успешно
+            return ProcessQuery(data, ref Answer, WaitDataBytes); // Возвращаем true, если операция установки катушки выполнена успешно
         }
 
         /// <summary>
@@ -543,25 +625,39 @@ namespace MdbusNServerMaster.Classes
             switch (TransportMode)
             {
                 case TransportMode.COM_PORT:
-                    byte[] Buffer = ModbusPackets.PacketReadHoldingRegister(TransportMode, DevAddr, StartingAddress, Count);
-                    answerLength = 5 + Count * 2;
-                    Answer = new byte[answerLength];
-                    if (ProcessQuery(Buffer, ref Answer, 6, answerLength) == true)
-                        return Answer;
-                    else
-                        return new byte[0];
+                    {
+                        byte[] Buffer = ModbusPackets.PacketReadHoldingRegister(TransportMode, DevAddr, StartingAddress, Count);
+                        answerLength = 5 + Count * 2;
+                        Answer = new byte[answerLength];
+                        if (ProcessQuery(Buffer, ref Answer, answerLength) == true)
+                            return Answer;
+                        else
+                            return new byte[0];
+                    }
+                    
 
                 case TransportMode.UDP:
-                    return Answer;
+                    {
+                        byte[] udpBuffer = ModbusPackets.PacketReadHoldingRegister(TransportMode, DevAddr, StartingAddress, Count); // Длина запроса для функции чтения регистров (регистры адресуются словами, поэтому длина буфера - 12 байт)
+                        answerLength = 9 + Count * 2;
+                        Answer = new byte[answerLength];
+                        if (ProcessQueryUDP(udpBuffer, ref Answer, answerLength) == true)
+                            return Answer;
+                        else
+                            return new byte[0];
+                    }
+                    
                 case TransportMode.TCP_CLIENT:
-                    // Создаем буфер для запроса в формате Modbus TCP
-                    byte[] tcpBuffer = ModbusPackets.PacketReadHoldingRegister(TransportMode, DevAddr, StartingAddress, Count); // Длина запроса для функции чтения регистров (регистры адресуются словами, поэтому длина буфера - 12 байт)
-                    answerLength = 9 + Count * 2;
-                    Answer = new byte[answerLength];
-                    if (ProcessQueryTCP(tcpBuffer, ref Answer, 12, answerLength) == true)
-                        return Answer;
-                    else 
-                        return new byte[0];
+                    {
+                        byte[] tcpBuffer = ModbusPackets.PacketReadHoldingRegister(TransportMode, DevAddr, StartingAddress, Count); // Длина запроса для функции чтения регистров (регистры адресуются словами, поэтому длина буфера - 12 байт)
+                        answerLength = 9 + Count * 2;
+                        Answer = new byte[answerLength];
+                        if (ProcessQueryTCP(tcpBuffer, ref Answer, answerLength) == true)
+                            return Answer;
+                        else
+                            return new byte[0];
+                    }
+                    
                 default:
                     return Answer;
             }
@@ -669,7 +765,7 @@ namespace MdbusNServerMaster.Classes
             Buffer[4] = (byte)(Value >> 8); // С.Б. Кол-ва регистров
             Buffer[5] = (byte)(Value & 0xFF);
 
-            if (!ProcessQuery(Buffer, ref Answer, 6, 8)) return false;
+            if (!ProcessQuery(Buffer, ref Answer, 8)) return false;
             if (DevAddr != 0)
             {
                 // Проверяем результат
@@ -726,7 +822,7 @@ namespace MdbusNServerMaster.Classes
                 Buffer[ByteCounter++] = (byte)(register >> 8); // Старший байт регистра
                 Buffer[ByteCounter++] = (byte)register; // Младший байт регистра
             }
-            if (!ProcessQuery(Buffer, ref Answer, MessageLength, Answer.Length)) return false;
+            if (!ProcessQuery(Buffer, ref Answer, Answer.Length)) return false;
             if (DevAddr != 0)
             {
                 // Проверяем результат
@@ -798,9 +894,9 @@ namespace MdbusNServerMaster.Classes
             result = tcp_client.Open();
             if (result >= 0)
             {
-                //TimeOut = DEFAULT_TIMEOUT;
+                TimeOut = DEFAULT_TIMEOUT;
                 PacketInterval = packetInterval;
-                //tcp_client.SetReceiveTimeout(TimeOut);
+                tcp_client.SetReceiveTimeout(TimeOut);
             }
             else
                 return false;
@@ -817,13 +913,13 @@ namespace MdbusNServerMaster.Classes
             if (udp_client != null)
                 udp_client.Close();
             udp_client = new ModbusUDP();
-            udp_client.SetRemouteAddress(ip_address, remote_port, local_port);
+            udp_client.SetRemouteAddress(ip_address, remote_port);
             result = udp_client.Open();
             if (result >= 0)
             {
-                //TimeOut = DEFAULT_TIMEOUT;
+                TimeOut = DEFAULT_TIMEOUT;
                 PacketInterval = packetInterval;
-                //udp_client.SetReceiveTimeout(TimeOut);
+                udp_client.SetReceiveTimeout(TimeOut);
             }
             else
                 return false;

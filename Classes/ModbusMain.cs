@@ -51,8 +51,9 @@ namespace MdbusNServerMaster.Classes
                 Console.WriteLine("Отсутствует файл конфигурирования линий связи");
                 return false;
             }
-            LineConfig connect_line = XmlHelper.DeserializeFromXml<LineConfig>(path);// конфигурация линий связи
-            lineConfigs.Add(connect_line);
+            List<LineConfig> connect_line = XmlHelper.DeserializeFromXml<List<LineConfig>>(path);// конфигурация линий связи
+            foreach(LineConfig line in connect_line)
+                lineConfigs.Add(line);
             return true;
         }
 

@@ -25,7 +25,7 @@
             else if(transportMode== TransportMode.UDP||transportMode==TransportMode.TCP_CLIENT)
                 Packet = new byte[12];
             byte[] Buffer = new byte[6];
-            Buffer[0] = 0; //DevAddr;                                    // Аддрес устройства
+            Buffer[0] = DevAddr;                                    // Аддрес устройства
             Buffer[1] = (byte)ModbusCode.ReadHoldingRegisters;      // Код функции чтения регистра
             Buffer[2] = (byte)(StartingAddress >> 8);               // Старший байт начального адреса регистра
             Buffer[3] = (byte)(StartingAddress & 0xFF);             // Младший байт начального адреса регистра
@@ -52,11 +52,13 @@
             return Packet;
         }
 
-
-
-
-
-
+        /// <summary>
+        /// Переписывает все элементы второго массива в первый, начиная со сдвига
+        /// </summary>
+        /// <param name="FirstArray">Массив в который надо перенести</param>
+        /// <param name="SecondArray">Массив из которого надо перенести</param>
+        /// <param name="Shearing">Сдвиг</param>
+        /// <returns>Возвращает преобразованный первый массив</returns>
         static byte[] ConnectArrays(byte[] FirstArray, byte[] SecondArray, int Shearing)
         {
             for (int i = 0; i < SecondArray.Length; i++)

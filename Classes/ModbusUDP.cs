@@ -7,10 +7,8 @@ namespace MdbusNServerMaster.Classes
     {
         string RemoteIpAddress;     // адрес для передачи запроса
         int RemotePort;             // порт для передачи запроса 
-        int LocalPort;
         public UdpClient udp_client;
-        IPEndPoint ReceiveIpEndPoint;
-        IPEndPoint SendIpEndPoint;
+        IPEndPoint endPoint;
 
         public string ErrorString;
         public int ErrorCode;
@@ -27,17 +25,15 @@ namespace MdbusNServerMaster.Classes
         {
             RemoteIpAddress = remoteIPaddress;
             RemotePort = remote_port;
-            LocalPort = local_port;
         }
 
         /// <summary>
         /// Установление адреса
         /// </summary>
-        public void SetRemouteAddress(string remoteIPaddress, ushort remote_port, ushort local_port)
+        public void SetRemouteAddress(string remoteIPaddress, ushort remote_port)
         {
             RemoteIpAddress = remoteIPaddress;
             RemotePort = remote_port;
-            LocalPort = local_port;
         }
 
         /// <summary>
@@ -61,24 +57,9 @@ namespace MdbusNServerMaster.Classes
                     udp_client.Close();
                     udp_client = null;
                 }
-
-                udp_client = new UdpClient(LocalPort);
-
-                // Создание объекта для хранения IP-адреса удаленного хоста
-                IPAddress remoteIPAddress;
-                if (!IPAddress.TryParse(RemoteIpAddress, out remoteIPAddress))
-                {
-                    ErrorString = String.Format("Недопустимый IP-адрес: {0}", RemoteIpAddress);
-                    ErrorCode = (int)DevErrors.IP_FORMAT_ERROR;
-                    return -1;
-                }
-
-                // Создание точек конечных для отправки и приема данных
-                ReceiveIpEndPoint = new IPEndPoint(IPAddress.Any, LocalPort);
-                SendIpEndPoint = new IPEndPoint(remoteIPAddress, RemotePort);
-
-                // Подключение к удаленному хосту
-                udp_client.Connect(SendIpEndPoint);
+                endPoint = new IPEndPoint(IPAddress.Parse(RemoteIpAddress), RemotePort);
+                udp_client = new UdpClient();
+                udp_client.Connect(endPoint);
             }
             catch (Exception e)
             {
@@ -129,7 +110,7 @@ namespace MdbusNServerMaster.Classes
                 {
                     if (rcount == 0)  // Если в текущем буфере нет данных для чтения
                     {
-                        rbuf = udp_client.Receive(ref ReceiveIpEndPoint); // Получение нового буфера данных
+                        rbuf = udp_client.Receive(ref endPoint); // Получение нового буфера данных
                         if (rbuf == null || rbuf.Length == 0)
                         {
                             // В случае пустого буфера пропускаем итерацию
@@ -170,31 +151,21 @@ namespace MdbusNServerMaster.Classes
         /// Отправка пакета по UDP
         /// </summary>
         /// <param name="buf">Пакет для отправки</param>
-        /// <param name="size">Размер данных на отправку из пакета</param>
         /// <returns>0 если отправка прошла успешно, -1 если возникли ошибки</returns>
-        public int Send(byte[] buf, int size)
+        public int Send(byte[] buf)
         {
             try
             {
-                if (buf == null || size <= 0 || size > buf.Length)
-                {
-                    throw new ArgumentException("Некорректные параметры buf или size");
-                }
-
-                int bytesSent = udp_client.Send(buf, size, SendIpEndPoint);
-
-                if (bytesSent != size)
-                {
-                    throw new Exception("Не все данные были успешно отправлены");
-                }
+                udp_client.Send(buf, buf.Length);
+                return 0;
             }
-            catch (Exception e)
+            catch (SocketException ex)
             {
-                ErrorString = String.Format("Ошибка передачи: {0}", e.Message);
+                ErrorString = String.Format("Ошибка передачи: {0}", ex.Message);
                 ErrorCode = (int)DevErrors.UDP_SEND_ERROR;
+                // Здесь можно добавить логирование
                 return -1;
             }
-            return 0;
         }
 
         /// <summary>
@@ -208,7 +179,7 @@ namespace MdbusNServerMaster.Classes
                 while (udp_client.Available > 0)
                 {
                     // Читаем данные из приемного буфера без обработки
-                    byte[] discardedData = udp_client.Receive(ref ReceiveIpEndPoint);
+                    byte[] discardedData = udp_client.Receive(ref endPoint);
                 }
             }
             catch (Exception e)
