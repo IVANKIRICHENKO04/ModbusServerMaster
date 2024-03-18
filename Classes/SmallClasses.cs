@@ -4,10 +4,12 @@
     /// Коллекция протоколов соединения
     /// </summary>
     public enum TransportMode
-    {   // режим транспорта данных
-        COM_PORT,       // COM-порт
-        UDP,            // UDP-клиент
-        TCP_CLIENT      // TCP-клиент
+    {
+        RTU,
+        UDP,
+        TCP,
+        RTUoverTCP,
+        RTUoverUDP
     }
 
     /// <summary>

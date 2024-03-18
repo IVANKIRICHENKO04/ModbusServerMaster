@@ -80,7 +80,7 @@ namespace MdbusNServerMaster.Classes
         /// </summary>
         public ModbusRTU()
         {
-            TransportMode = TransportMode.COM_PORT;
+            TransportMode = TransportMode.RTU;
             Buffer = new byte[BUFFER_SIZE];
             Values = new ushort[BUFFER_SIZE / 2];
             ErrorString.PropertyChanged += (sender, e) =>
@@ -196,7 +196,7 @@ namespace MdbusNServerMaster.Classes
         /// <param name="timeout">Таймаут в миллисекундах.</param>
         public void SetTimeout(int timeout)
         {
-            if (TransportMode == (ushort)TransportMode.COM_PORT)
+            if (TransportMode == (ushort)TransportMode.RTU)
             {
                 if (Port != null)
                     Port.ReadTimeout = timeout;
@@ -208,7 +208,7 @@ namespace MdbusNServerMaster.Classes
                     udp_client.SetReceiveTimeout(timeout);
             }
             else
-            if (TransportMode == TransportMode.TCP_CLIENT)
+            if (TransportMode == TransportMode.TCP)
             {
                 if (tcp_client != null)
                     tcp_client.SetReceiveTimeout(timeout);
@@ -223,7 +223,7 @@ namespace MdbusNServerMaster.Classes
             ErrorCode = 0; // Сбрасывает код ошибки
 
             // В зависимости от режима транспорта выполняется закрытие соединения
-            if (TransportMode == (ushort)TransportMode.COM_PORT)
+            if (TransportMode == (ushort)TransportMode.RTU)
             {
                 if (Port != null)
                 {
@@ -265,7 +265,7 @@ namespace MdbusNServerMaster.Classes
         /// <returns>Возвращает true, если линия связи доступна, в противном случае - false.</returns>
         bool TransportCheck()
         {
-            if (TransportMode == (ushort)TransportMode.COM_PORT)
+            if (TransportMode == (ushort)TransportMode.RTU)
             {
                 if (Port == null)
                 {
@@ -299,7 +299,38 @@ namespace MdbusNServerMaster.Classes
                 }
             }
             else
-            if (TransportMode == TransportMode.TCP_CLIENT)
+            if (TransportMode == TransportMode.TCP)
+            {
+                if (tcp_client == null)
+                {
+                    ErrorString.ErrorString = "TCP-клиент не создан";
+                    ErrorCode = (int)DevErrors.TCP_CLIENT_NOT_OPEN;
+                    return false;
+                }
+                if (tcp_client.tcp_client == null || tcp_client.tcp_client.Client == null)
+                {
+                    ErrorString.ErrorString = "TCP-клиент - соединение закрыто";
+                    ErrorCode = (int)DevErrors.TCP_CONNECTION_CLOSED;
+                    return false;
+                }
+            }
+            if (TransportMode == TransportMode.RTUoverUDP)
+            {
+                if (udp_client == null)
+                {
+                    ErrorString.ErrorString = "UDP-клиент не создан";
+                    ErrorCode = (int)DevErrors.UDP_CLIENT_NOT_OPEN;
+                    return false;
+                }
+                if (udp_client.udp_client == null || udp_client.udp_client.Client == null)
+                {
+                    ErrorString.ErrorString = "UDP-клиент неожиданно закрыт";
+                    ErrorCode = (int)DevErrors.UDP_CLIENT_CLOSED;
+                    return false;
+                }
+            }
+            else
+            if (TransportMode == TransportMode.RTUoverTCP)
             {
                 if (tcp_client == null)
                 {
@@ -327,7 +358,7 @@ namespace MdbusNServerMaster.Classes
             try
             {
                 // Если режим транспорта - COM порт
-                if (TransportMode == (ushort)TransportMode.COM_PORT)
+                if (TransportMode == (ushort)TransportMode.RTU)
                 {
                     Port.DiscardInBuffer(); // Очищаем входной буфер порта
                     Port.Write(WriteBuffer, 0, WriteBuffer.Length); // Записываем данные в порт
@@ -353,7 +384,7 @@ namespace MdbusNServerMaster.Classes
             try
             {
                 // Если режим транспорта - COM порт
-                if (TransportMode == TransportMode.COM_PORT)
+                if (TransportMode == TransportMode.RTU)
                 {
                     // Читаем адрес пока не найдем его
                     for (int n = 0; n < 100; n++)
@@ -528,7 +559,6 @@ namespace MdbusNServerMaster.Classes
         /// <summary>
         /// Читает версию прошивки устройства.
         /// </summary>
-        /// <param name="plc_type">Тип PLC (Programmable Logic Controller - программируемый логический контроллер).</param>
         /// <param name="DeviceAddr">Адрес устройства</param>
         /// <returns>Строка, содержащая версию прошивки.</returns>
         public string ReadProgVersion(byte DeviceAddr)
@@ -553,8 +583,8 @@ namespace MdbusNServerMaster.Classes
         /// <summary>
         /// Создает контрольную сумму для пакета данных.
         /// </summary>
-        /// <param name="Message">Массив байтов, содержащий данные, для которых требуется создать контрольную сумму.</param>
-        /// <param name="MessageLength">Длина сообщения.</param>
+        /// <param name="data">Массив байтов, содержащий данные, для которых требуется создать контрольную сумму.</param>
+        /// <param name="length">Длина сообщения.</param>
         /// <returns>Контрольная сумма пакета данных.</returns>
         public ushort CalculateCRC(byte[] data, int length)
         {
@@ -624,7 +654,7 @@ namespace MdbusNServerMaster.Classes
             int answerLength;
             switch (TransportMode)
             {
-                case TransportMode.COM_PORT:
+                case TransportMode.RTU:
                     {
                         byte[] Buffer = ModbusPackets.PacketReadHoldingRegister(TransportMode, DevAddr, StartingAddress, Count);
                         answerLength = 5 + Count * 2;
@@ -647,7 +677,7 @@ namespace MdbusNServerMaster.Classes
                             return new byte[0];
                     }
                     
-                case TransportMode.TCP_CLIENT:
+                case TransportMode.TCP:
                     {
                         byte[] tcpBuffer = ModbusPackets.PacketReadHoldingRegister(TransportMode, DevAddr, StartingAddress, Count); // Длина запроса для функции чтения регистров (регистры адресуются словами, поэтому длина буфера - 12 байт)
                         answerLength = 9 + Count * 2;
@@ -699,7 +729,7 @@ namespace MdbusNServerMaster.Classes
                     byte[] Answer = ReadHoldingRegisters(DevAddr, Address, cnt); // Предполагаем, что каждый регистр имеет размер 2 байта
                     if (Answer.Length == 0)
                         return new int[0];
-                    if (TransportMode == TransportMode.COM_PORT)
+                    if (TransportMode == TransportMode.RTU)
                         Shift = 3;
                     else
                         Shift = 9;
@@ -725,7 +755,7 @@ namespace MdbusNServerMaster.Classes
                 if (Answer.Length == 0)
                     return new int[0];
                 // Преобразуем байты в int и сохраняем их в массиве FinalAnswer
-                if (TransportMode == TransportMode.COM_PORT)
+                if (TransportMode == TransportMode.RTU)
                     Shift = 3;
                 else
                     Shift = 9;

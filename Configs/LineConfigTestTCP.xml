@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LineConfig xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-  <transportMode>TCP_CLIENT</transportMode>
+  <transportMode>TCP</transportMode>
   <LineNumber>1</LineNumber>
   <COMport>0</COMport>
   <Baudrate>38400</Baudrate>

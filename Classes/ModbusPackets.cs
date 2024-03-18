@@ -20,18 +20,18 @@
         public static byte[] PacketReadHoldingRegister(TransportMode transportMode, byte DevAddr, int StartingAddress, int Count)
         {
             byte[] Packet = new byte[0];
-            if (transportMode == TransportMode.COM_PORT)
+            if (transportMode == TransportMode.RTU)
                 Packet = new byte[8];
-            else if(transportMode== TransportMode.UDP||transportMode==TransportMode.TCP_CLIENT)
+            else if(transportMode== TransportMode.UDP||transportMode==TransportMode.TCP)
                 Packet = new byte[12];
             byte[] Buffer = new byte[6];
             Buffer[0] = DevAddr;                                    // Аддрес устройства
             Buffer[1] = (byte)ModbusCode.ReadHoldingRegisters;      // Код функции чтения регистра
             Buffer[2] = (byte)(StartingAddress >> 8);               // Старший байт начального адреса регистра
             Buffer[3] = (byte)(StartingAddress & 0xFF);             // Младший байт начального адреса регистра
-            Buffer[4] = (byte)(Count >> 8);                         // Старщий байт колличества регистров
+            Buffer[4] = (byte)(Count >> 8);                         // Старший байт колличества регистров
             Buffer[5] = (byte)(Count & 0xFF);                       // Младший байт колличества регистров
-            if (transportMode == TransportMode.COM_PORT)
+            if (transportMode == TransportMode.RTU)
             {
                 Packet = ConnectArrays(Packet, Buffer, 0);
                 ushort CRC = CalculateCRC(Packet, 6);
@@ -42,12 +42,12 @@
             {
                 Packet = ConnectArrays(Packet, Buffer, 6);
                 ushort transactionId = (ushort)(DateTime.UtcNow.Ticks % ushort.MaxValue);
-                Packet[0] = (byte)(transactionId >> 8); // Старший байт идентификатора транзакции
-                Packet[1] = (byte)(transactionId & 0xFF); // Младший байт идентификатора транзакции
-                Packet[2] = 0; // Идентификатор протокола Modbus (всегда 0 в Modbus TCP)
-                Packet[3] = 0; // Идентификатор протокола Modbus (продолжение)
-                Packet[4] = 0; // Длина последующих байт (старший байт)
-                Packet[5] = 6; // Длина последующих байт (младший байт) - 6 байт для функции чтения регистров
+                Packet[0] = (byte)(transactionId >> 8);             // Старший байт идентификатора транзакции
+                Packet[1] = (byte)(transactionId & 0xFF);           // Младший байт идентификатора транзакции
+                Packet[2] = 0;                                      // Идентификатор протокола Modbus (всегда 0 в Modbus TCP)
+                Packet[3] = 0;                                      // Идентификатор протокола Modbus (продолжение)
+                Packet[4] = 0;                                      // Длина последующих байт (старший байт)
+                Packet[5] = 6;                                      // Длина последующих байт (младший байт) - 6 байт для функции чтения регистров
             }
             return Packet;
         }

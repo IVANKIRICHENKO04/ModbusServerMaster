@@ -38,7 +38,7 @@
     </Devices>
   </LineConfig>
   <LineConfig>
-    <transportMode>TCP_CLIENT</transportMode>
+    <transportMode>TCP</transportMode>
     <LineNumber>2</LineNumber>
     <COMport>0</COMport>
     <Baudrate>38400</Baudrate>
@@ -63,7 +63,7 @@
     </Devices>
   </LineConfig>
   <LineConfig>
-    <transportMode>TCP_CLIENT</transportMode>
+    <transportMode>TCP</transportMode>
     <LineNumber>3</LineNumber>
     <COMport>0</COMport>
     <Baudrate>38400</Baudrate>

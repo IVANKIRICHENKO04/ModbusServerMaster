@@ -152,7 +152,7 @@ namespace MdbusNServerMaster.Classes
         /// </summary>
         public bool TransportOpen()
         {
-            if (lineConfig.transportMode == TransportMode.COM_PORT)
+            if (lineConfig.transportMode == TransportMode.RTU)
             {
                 if (modbus.SerialPortOpen((byte)lineConfig.COMport, lineConfig.Baudrate) == true)
                 {
@@ -184,7 +184,7 @@ namespace MdbusNServerMaster.Classes
                 }
             }
             else
-            if (lineConfig.transportMode == TransportMode.TCP_CLIENT)
+            if (lineConfig.transportMode == TransportMode.TCP)
             {
                 if (modbus.TcpPortOpen(lineConfig.IPAddress, lineConfig.IPport, modbus.GetPacketInterval(lineConfig.Baudrate)) == true)
                 {
